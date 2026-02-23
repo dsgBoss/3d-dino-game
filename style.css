@@ -1,0 +1,39 @@
+body {
+    margin: 0;
+    overflow: hidden; /* Prevents scrollbars from appearing */
+    font-family: sans-serif;
+}
+
+#game-canvas {
+    display: block; /* Ensures the canvas behaves correctly */
+}
+
+#info-container {
+    position: absolute; /* Position UI elements over the canvas */
+    top: 10px;
+    left: 10px;
+    color: #333;
+    background-color: rgba(255, 255, 255, 0.7);
+    padding: 10px;
+    border-radius: 5px;
+    z-index: 100; /* Make sure UI is on top */
+}
+
+#game-over {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%); /* Center the element perfectly */
+    color: #d9534f; /* A nice red for game over */
+    font-size: 2em;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    z-index: 100;
+}
+
+/* A utility class to easily hide elements */
+.hidden {
+    display: none;
+}

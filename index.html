@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Dino Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- This container holds the score and game over text -->
+    <div id="info-container">
+        <div id="score">Score: 0</div>
+        <div id="game-over" class="hidden">Game Over! Press 'R' to Restart</div>
+    </div>
+    
+    <!-- This is where the Three.js game will be rendered -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- 
+      We import the Three.js library from a CDN (Content Delivery Network).
+      This is a common and efficient way to include external libraries.
+    -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- Your game's logic is in this file -->
+    <script src="script.js"></script>
+</body>
+</html>
