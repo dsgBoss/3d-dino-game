@@ -1,153 +1,177 @@
-// --- Scene, Camera, and Renderer Setup ---
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+// --- BASIC SETUP ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb); // Sky blue
-
+scene.background = new THREE.Color(0x111111);
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 5, 15); // Position camera to see the scene
+camera.position.y = 1.8; // Standard eye-level height
 
-const renderer = new THREE.WebGLRenderer({ 
+const renderer = new THREE.WebGLRenderer({
     canvas: document.getElementById('game-canvas'),
-    antialias: true // Makes the edges of objects smoother
+    antialias: true
 });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.shadowMap.enabled = true; // Enable shadows
+renderer.shadowMap.enabled = true;
 
-// --- Lighting ---
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+// --- LIGHTING ---
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-directionalLight.position.set(10, 20, 0);
-directionalLight.castShadow = true;
-scene.add(directionalLight);
+const pointLight = new THREE.PointLight(0xffffff, 1, 100);
+pointLight.position.set(0, 10, 0);
+pointLight.castShadow = true;
+scene.add(pointLight);
 
-// --- Objects ---
-const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
-const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x228b22 });
-const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-ground.rotation.x = -Math.PI / 2; // Rotate the plane to be flat
-ground.receiveShadow = true;
-scene.add(ground);
+// --- LEVEL GEOMETRY ---
+const floorGeometry = new THREE.PlaneGeometry(50, 50);
+const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x444444, side: THREE.DoubleSide });
+const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
 
-const dinoGeometry = new THREE.BoxGeometry(1, 1, 1);
-const dinoMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
-const dino = new THREE.Mesh(dinoGeometry, dinoMaterial);
-dino.position.y = 0.5; // Place dino on top of the ground
-dino.castShadow = true;
-scene.add(dino);
-
-// --- Game State & Logic ---
-let score = 0;
-let isJumping = false;
-let yVelocity = 0;
-const gravity = -0.05;
-let gameSpeed = 0.2;
-let gameOver = false;
-const obstacles = [];
-
-// --- UI Elements ---
-const scoreElement = document.getElementById('score');
-const gameOverElement = document.getElementById('game-over');
-
-// --- Event Listeners ---
-document.addEventListener('keydown', onKeyDown);
-window.addEventListener('resize', onWindowResize);
-
-function onKeyDown(event) {
-    if (event.code === 'Space' && !isJumping && !gameOver) {
-        isJumping = true;
-        yVelocity = 1.2;
-    }
-    if (event.code === 'KeyR' && gameOver) {
-        restartGame();
-    }
+function createWall(width, height, depth, x, y, z) {
+    const wallGeometry = new THREE.BoxGeometry(width, height, depth);
+    const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x888888 });
+    const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+    wall.position.set(x, y, z);
+    wall.receiveShadow = true;
+    wall.castShadow = true;
+    scene.add(wall);
 }
 
-function onWindowResize() {
+createWall(50, 10, 1, 0, 5, -25); // Back wall
+createWall(50, 10, 1, 0, 5, 25);  // Front wall
+createWall(1, 10, 50, -25, 5, 0); // Left wall
+createWall(1, 10, 50, 25, 5, 0);  // Right wall
+
+// --- TARGETS ---
+const targets = [];
+let score = 0;
+const scoreElement = document.getElementById('score');
+
+function spawnTarget() {
+    const targetGeometry = new THREE.SphereGeometry(0.5, 16, 16);
+    const targetMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+    const target = new THREE.Mesh(targetGeometry, targetMaterial);
+    target.castShadow = true;
+
+    target.position.set(
+        (Math.random() - 0.5) * 48,
+        Math.random() * 8 + 1,
+        (Math.random() - 0.5) * 48
+    );
+
+    scene.add(target);
+    targets.push(target);
+}
+
+// Spawn initial targets
+for (let i = 0; i < 10; i++) {
+    spawnTarget();
+}
+
+// --- CONTROLS ---
+const controls = new PointerLockControls(camera, renderer.domElement);
+const blocker = document.getElementById('blocker');
+
+blocker.addEventListener('click', () => {
+    controls.lock();
+});
+
+controls.addEventListener('lock', () => {
+    blocker.style.display = 'none';
+});
+
+controls.addEventListener('unlock', () => {
+    blocker.style.display = 'flex';
+});
+
+scene.add(controls.getObject());
+
+// --- MOVEMENT ---
+const keys = {};
+document.addEventListener('keydown', (event) => { keys[event.code] = true; });
+document.addEventListener('keyup', (event) => { keys[event.code] = false; });
+
+const moveSpeed = 5.0;
+const velocity = new THREE.Vector3();
+const direction = new THREE.Vector3();
+
+// --- SHOOTING ---
+const raycaster = new THREE.Raycaster();
+
+window.addEventListener('click', () => {
+    if (!controls.isLocked) return;
+
+    raycaster.setFromCamera({ x: 0, y: 0 }, camera); // Ray from center of screen
+    const intersects = raycaster.intersectObjects(targets);
+
+    if (intersects.length > 0) {
+        const hitObject = intersects[0].object;
+        scene.remove(hitObject);
+        
+        // Remove from targets array
+        const index = targets.indexOf(hitObject);
+        if (index > -1) {
+            targets.splice(index, 1);
+        }
+
+        // Update score and spawn a new target
+        score++;
+        scoreElement.textContent = `Score: ${score}`;
+        spawnTarget();
+    }
+});
+
+// --- RESIZE ---
+window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
-}
+});
 
-// --- Game Functions ---
-function createObstacle() {
-    const obstacleHeight = Math.random() * 2 + 1;
-    const obstacleGeometry = new THREE.BoxGeometry(1, obstacleHeight, 1);
-    const obstacleMaterial = new THREE.MeshStandardMaterial({ color: 0x006400 });
-    const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
-    
-    obstacle.position.set(-50, obstacleHeight / 2, 0);
-    obstacle.castShadow = true;
-    
-    scene.add(obstacle);
-    obstacles.push(obstacle);
-}
+// --- ANIMATION LOOP ---
+const clock = new THREE.Clock();
 
-function restartGame() {
-    score = 0;
-    gameSpeed = 0.2;
-    gameOver = false;
-    
-    gameOverElement.classList.add('hidden');
-    
-    obstacles.forEach(obstacle => scene.remove(obstacle));
-    obstacles.length = 0; // Clear the array
-    
-    dino.position.y = 0.5;
-    
-    animate(); // Restart the animation loop
-}
-
-// --- Main Animation Loop ---
 function animate() {
-    if (gameOver) {
-        return; // Stop the loop if the game has ended
-    }
-
     requestAnimationFrame(animate);
+    const delta = clock.getDelta();
 
-    // Jump physics
-    if (isJumping) {
-        dino.position.y += yVelocity;
-        yVelocity += gravity;
-        if (dino.position.y <= 0.5) {
-            dino.position.y = 0.5;
-            isJumping = false;
-            yVelocity = 0;
-        }
+    // Only update controls if the pointer is locked
+    if (controls.isLocked) {
+        // Reset velocity and direction
+        velocity.x -= velocity.x * 10.0 * delta;
+        velocity.z -= velocity.z * 10.0 * delta;
+
+        direction.z = Number(keys['KeyW']) - Number(keys['KeyS']);
+        direction.x = Number(keys['KeyA']) - Number(keys['KeyD']);
+        direction.normalize(); // Ensure consistent speed in all directions
+
+        if (keys['KeyW'] || keys['KeyS']) velocity.z -= direction.z * moveSpeed * delta;
+        if (keys['KeyA'] || keys['KeyD']) velocity.x -= direction.x * moveSpeed * delta;
+
+        // Apply movement
+        controls.moveRight(-velocity.x);
+        controls.moveForward(-velocity.z);
+
+        // Simple collision detection to keep player within the walls
+        const playerPosition = controls.getObject().position;
+        if (playerPosition.x > 24) playerPosition.x = 24;
+        if (playerPosition.x < -24) playerPosition.x = -24;
+        if (playerPosition.z > 24) playerPosition.z = 24;
+        if (playerPosition.z < -24) playerPosition.z = -24;
     }
 
-    // Spawn new obstacles
-    if (Math.random() < 0.01 && obstacles.length < 5) {
-        createObstacle();
-    }
-
-    const dinoBox = new THREE.Box3().setFromObject(dino);
-
-    // Update obstacles and check for collisions
-    for (let i = obstacles.length - 1; i >= 0; i--) {
-        const obstacle = obstacles[i];
-        obstacle.position.x += gameSpeed;
-
-        const obstacleBox = new THREE.Box3().setFromObject(obstacle);
-        if (dinoBox.intersectsBox(obstacleBox)) {
-            gameOver = true;
-            gameOverElement.classList.remove('hidden');
-        }
-
-        // Remove off-screen obstacles for performance
-        if (obstacle.position.x > 20) {
-            scene.remove(obstacle);
-            obstacles.splice(i, 1);
-            score++;
-            scoreElement.innerText = `Score: ${score}`;
-            gameSpeed += 0.005; // Increase speed slightly
-        }
-    }
+    // Make targets bob up and down
+    const time = Date.now() * 0.001;
+    targets.forEach(target => {
+        target.position.y += Math.sin(time * 2 + target.id) * 0.005;
+    });
 
     renderer.render(scene, camera);
 }
 
-// --- Start Game ---
 animate();
 
